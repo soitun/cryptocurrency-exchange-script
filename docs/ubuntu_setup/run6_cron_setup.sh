@@ -46,7 +46,8 @@ echo "4) Blockgum"
 echo "5) Cryptonote"
 echo "6) Coinpayments"
 
-read -p "Enter numbers separated by spaces (e.g., 1 2 3): " selection
+# Don't let an empty stdin (piped/non-interactive) trip set -e
+read -p "Enter numbers separated by spaces (e.g., 1 2 3): " selection || selection=""
 
 # Define the original path (API domain)
 INDEX_PATH="/data/wwwroot/${DOMAIN}"
@@ -109,14 +110,19 @@ else
     echo "No optional crons selected. Installing mandatory crons only."
 fi
 
-# Backup current crontab
-crontab -u www-data -l > mycron.backup 2>/dev/null
+# Use command substitution rather than a pipeline so set -e doesn't trip when
+# grep returns 1 on no matches or crontab returns 1 on no existing crontab.
+# (Bash 5's pipeline/||true interaction caused this to silently kill the script.)
+EXISTING_CRONS="$(crontab -u www-data -l 2>/dev/null | grep -v "${INDEX_PATH}" || true)"
 
 CRON_TMP_FILE=$(mktemp)
 echo "Temporary file created at: $CRON_TMP_FILE"
 
-# Populate the temp file with existing crons excluding old installations
-crontab -u www-data -l 2>/dev/null | grep -v "${INDEX_PATH}" > "$CRON_TMP_FILE"
+# Save a backup copy of the prior crontab (best-effort)
+[ -n "$EXISTING_CRONS" ] && echo "$EXISTING_CRONS" > /tmp/mycron.backup.$(date +%s)
+
+# Seed the temp file with preserved existing entries
+[ -n "$EXISTING_CRONS" ] && printf '%s\n' "$EXISTING_CRONS" > "$CRON_TMP_FILE"
 
 # Add new cron jobs to the temporary file
 for job in "${CRON_JOBS_TO_ADD[@]}"; do

@@ -124,18 +124,26 @@ check_os() {
 verify_license() {
     print_step "1" "License Verification"
 
-    # Get license key from user
-    echo -e "\n${CYAN}Enter your Codono license key:${NC}"
-    read -p "License Key: " LICENSE_KEY
+    # Get license key (prompt only if not passed via CLI)
+    if [ -z "$LICENSE_KEY" ]; then
+        echo -e "\n${CYAN}Enter your Codono license key:${NC}"
+        read -p "License Key: " LICENSE_KEY
+    else
+        print_info "License key provided via CLI"
+    fi
 
     if [ -z "$LICENSE_KEY" ]; then
         print_error "License key cannot be empty"
         exit 1
     fi
 
-    # Get API domain from user
-    echo -e "\n${CYAN}Enter your API domain (e.g., api.exchange.com):${NC}"
-    read -p "API Domain: " API_DOMAIN
+    # Get API domain (prompt only if not passed via CLI)
+    if [ -z "$API_DOMAIN" ]; then
+        echo -e "\n${CYAN}Enter your API domain (e.g., api.exchange.com):${NC}"
+        read -p "API Domain: " API_DOMAIN
+    else
+        print_info "Domain provided via CLI: $API_DOMAIN"
+    fi
 
     if [ -z "$API_DOMAIN" ]; then
         print_error "API domain cannot be empty"
@@ -148,9 +156,13 @@ verify_license() {
         exit 1
     fi
 
-    # Get license email from user
-    echo -e "\n${CYAN}Enter the email associated with your license:${NC}"
-    read -p "License Email: " LICENSE_EMAIL
+    # Get license email (prompt only if not passed via CLI)
+    if [ -z "$LICENSE_EMAIL" ]; then
+        echo -e "\n${CYAN}Enter the email associated with your license:${NC}"
+        read -p "License Email: " LICENSE_EMAIL
+    else
+        print_info "Email provided via CLI: $LICENSE_EMAIL"
+    fi
 
     if [ -z "$LICENSE_EMAIL" ]; then
         print_error "Email cannot be empty"
@@ -878,6 +890,16 @@ show_summary() {
 # ============================================
 
 main() {
+    # Parse CLI arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -license) LICENSE_KEY="$2"; shift 2 ;;
+            -domain)  API_DOMAIN="$2"; shift 2 ;;
+            -email)   LICENSE_EMAIL="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
     print_banner
 
     # Pre-flight checks

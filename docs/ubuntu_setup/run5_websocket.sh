@@ -38,6 +38,13 @@ if [ -z "$FRONTEND_DOMAIN" ]; then
     FRONTEND_DOMAIN=$(echo "$DOMAIN" | sed 's/^api\.//')
 fi
 
+# Ensure SocketBot directory is writable by www-data.
+# Workerman (vendor/workerman/workerman) writes a PID file next to itself, so the
+# whole SocketBot tree (including vendor/) must be www-data-owned. Without this,
+# socketbot exits immediately with "can not save pid" and supervisor reports FATAL.
+echo "Setting SocketBot ownership to www-data..."
+chown -R www-data:www-data /data/wwwroot/codebase/SocketBot
+
 # Configure Supervisor to keep the socket bot running
 echo "Configuring Supervisor for socket bot..."
 cat > ${SUPERVISOR_CONF} << EOF

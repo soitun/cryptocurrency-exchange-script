@@ -23,17 +23,30 @@ CRON_KEY=$(grep 'CRON_KEY:' /opt/credentials.yml | cut -d ' ' -f 2)
 # Extract the first part of the API domain for SHORT_NAME (e.g., api.mysite.com -> Mysite)
 SITE_NAME=$(echo "${DOMAIN}" | sed 's/^api\.//' | awk -F'.' '{print toupper(substr($1,1,1)) tolower(substr($1,2))}')
 
-# Verify required directories exist before moving contents
-if [[ -d "/data/wwwroot/${DOMAIN}" && -d "/data/wwwroot/backend/codebase" && -d "/data/wwwroot/backend/webserver" ]]; then
-    echo "Moving files..."
-    mv /data/wwwroot/backend/codebase /data/wwwroot/ || { echo "Failed to move codebase directory."; exit 1; }
-    mv /data/wwwroot/backend/webserver/* /data/wwwroot/${DOMAIN}/ || { echo "Failed to move webserver files."; exit 1; }
-    echo "Files have been moved successfully."
-else
-    echo "One or more required directories do not exist."
-    echo "Expected: /data/wwwroot/${DOMAIN}, /data/wwwroot/backend/codebase, /data/wwwroot/backend/webserver"
+# Idempotent layout setup.
+# Older backend.zip placed codebase/ and webserver/ inside backend/ — we move them out.
+# Newer backend.zip already pre-organizes them at the final paths — we skip the moves.
+if [ ! -d "/data/wwwroot/${DOMAIN}" ]; then
+    echo "ERROR: /data/wwwroot/${DOMAIN} does not exist. Run run2 first."
     exit 1
 fi
+
+if [ -d "/data/wwwroot/backend/codebase" ] && [ ! -d "/data/wwwroot/codebase" ]; then
+    echo "Moving codebase out of backend/..."
+    mv /data/wwwroot/backend/codebase /data/wwwroot/ || { echo "Failed to move codebase directory."; exit 1; }
+fi
+
+if [ -d "/data/wwwroot/backend/webserver" ] && [ -n "$(ls -A /data/wwwroot/backend/webserver 2>/dev/null)" ]; then
+    echo "Moving webserver/* into ${DOMAIN}/..."
+    mv /data/wwwroot/backend/webserver/* "/data/wwwroot/${DOMAIN}/" || { echo "Failed to move webserver files."; exit 1; }
+fi
+
+# Hard requirement: codebase must exist at /data/wwwroot/codebase after maybe-moves
+if [ ! -d "/data/wwwroot/codebase" ]; then
+    echo "ERROR: /data/wwwroot/codebase does not exist (checked both /data/wwwroot/codebase and /data/wwwroot/backend/codebase)."
+    exit 1
+fi
+echo "Layout OK: /data/wwwroot/${DOMAIN} and /data/wwwroot/codebase present."
 
 # Check if /data/wwwroot/codebase/Runtime exists, if not then create
 if [ ! -d "/data/wwwroot/codebase/Runtime" ]; then

@@ -121,7 +121,15 @@ else
     }
 
     generate_2fa_secret_key() {
-        openssl rand -base64 10 | tr -dc A-Z2-7 | head -c 16
+        # Codono's GoogleAuthenticator (Application/Common/Ext/GoogleAuthenticator.class.php)
+        # base32-decodes the secret in 8-char chunks and rejects any padding count not in
+        # {0,1,3,4,6}. That means the stored secret MUST be a multiple of 8 base32 chars
+        # (16 is the standard). The old generator (openssl base64 | tr | head -c 16) lost
+        # most characters to the filter and produced a short, non-decodable secret like
+        # "YAZF5GHRWNA" (11 chars) → every TOTP verification fails.
+        #
+        # 10 random bytes encode to exactly 16 base32 chars (with '======' padding stripped).
+        head -c 10 /dev/urandom | base32 | tr -d '=\n'
     }
 
     HTACCESS_USERNAME="HU_$(generate_password 16)"
@@ -188,13 +196,22 @@ apt-get install -y \
 # Note: php7.4-fileinfo is included in php7.4-common (installed as dependency)
 
 # Install swoole via PECL if not available as apt package
+# IMPORTANT: pecl failures must NOT abort the script — MariaDB/Redis/Memcached steps come after.
+# Swoole is only required by the SocketBot WebSocket; everything else works without it.
 if ! apt-get install -y php7.4-swoole 2>/dev/null; then
     echo "php7.4-swoole not available via apt, installing via PECL..."
     apt-get install -y php7.4-dev php-pear
-    # Pipe empty responses to avoid interactive prompts (enable openssl, http2, etc.)
-    printf '\n\n\n\n\n' | pecl install swoole
-    echo "extension=swoole.so" > /etc/php/7.4/mods-available/swoole.ini
-    phpenmod -v 7.4 swoole
+    # Pin to a known-good version compatible with PHP 7.4.
+    # Pipe 'no' answers for all swoole build options and close stdin to be safe.
+    if printf 'no\nno\nno\nno\nno\nno\nno\n' | pecl install -f swoole-4.8.13 < /dev/null; then
+        echo "extension=swoole.so" > /etc/php/7.4/mods-available/swoole.ini
+        phpenmod -v 7.4 swoole
+        echo "swoole installed via PECL."
+    else
+        echo "WARNING: swoole PECL install failed. SocketBot WebSocket will be unavailable,"
+        echo "         but MariaDB/Redis/Memcached/Nginx will still install."
+        echo "         You can retry later with: pecl install -f swoole-4.8.13"
+    fi
 fi
 
 # Step 4: Install MariaDB
